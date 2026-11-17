@@ -1,5 +1,7 @@
 # lark-channel-bridge
 
+> Orca fork: see [Orca setup and limits](docs/ORCA.md) and [upstream/rebase maintenance](docs/UPSTREAM.md). The upstream bridge is retained; Orca is an opt-in Codex execution backend.
+
 A lightweight bot that bridges Feishu / Lark messenger with your local Claude Code or Codex CLI. Run one command, scan a QR code to bind a PersonalAgent app, and talk to your local coding agent from chat.
 
 [中文 README](./README.zh.md)
