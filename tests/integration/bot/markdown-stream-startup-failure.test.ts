@@ -82,6 +82,23 @@ afterEach(async () => {
 });
 
 describe('markdown stream startup failures', () => {
+  it('explains an Orca preflight block without submitting or replaying the message', async () => {
+    const h = await createHarness({ messageReply: 'text' });
+    h.controls.configPath = join(h.tmp.root, 'config.json');
+    h.profileConfig.codex!.orca = { command: '/orca', bindings: { oc_dm: {
+      terminal: 'term_test', incarnationId: 'inc-1', worktreeId: 'tree-1', cwd: h.tmp.workspace,
+    } } };
+    Object.assign(h.agent, { prepareRun: async () => { throw new Error('unresolved supervisor lease'); } });
+    await startTestBridge(h);
+    await h.channel.handlers.message?.(message('om_blocked_orca', 'run'));
+    await waitFor(() => h.channel.sent.length === 1);
+    expect(lastMarkdown(h.channel)).toContain('Orca');
+    expect(lastMarkdown(h.channel)).toContain('未提交');
+    await h.channel.handlers.message?.(message('om_blocked_orca', 'duplicate'));
+    expect(h.channel.sent).toHaveLength(1);
+    expect(h.agent.runOptions).toHaveLength(0);
+  });
+
   it('records persistent-backend delivery only after the IM receipt and preserves source IDs', async () => {
     const h = await createHarness({ messageReply: 'text', events: [
       { type: 'final_text', content: 'final result' }, { type: 'done', terminationReason: 'normal' },

@@ -16,7 +16,7 @@ import {
   type WorkingDirectoryResolveResult,
 } from '../policy/workspace';
 import type { RunExecution, RunExecutor } from '../runtime/run-executor';
-import { RunRejected, type RunRejectedCode } from '../runtime/errors';
+import { RunRejected, SpawnFailed, type RunRejectedCode } from '../runtime/errors';
 import type { SessionCatalog } from '../session/catalog';
 import type { SessionStore } from '../session/store';
 import type { WorkspaceStore } from '../workspace/store';
@@ -45,6 +45,7 @@ export interface StartRunFlowInput {
 }
 
 export type RunFlowRejectCode =
+  | 'agent-prepare-failed'
   | WorkingDirectoryRejectReason
   | RunPolicyReject['rejectReason']['code']
   | RunRejectedCode;
@@ -161,6 +162,12 @@ export async function startRunFlow(input: StartRunFlowInput): Promise<StartRunFl
       observability: input.observability,
     });
   } catch (err) {
+    if (input.profileConfig.codex?.orca && err instanceof SpawnFailed) {
+      return { ok: false, workspace, rejectReason: {
+        code: 'agent-prepare-failed',
+        userVisible: 'Orca 主管尚未就绪，或有待核对的持久锁。本条任务未提交；请核对绑定、工作区及上一条任务的执行和送达状态，不会自动重发。',
+      } };
+    }
     if (err instanceof RunRejected) {
       return {
         ok: false,
