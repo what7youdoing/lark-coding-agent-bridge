@@ -1486,36 +1486,36 @@ async function sendFinalReply(input: {
 
   await input.deliveryRun?.recordDelivery?.({ sending: true });
   try {
-  if (input.replyMode === 'card') {
-    const result = await input.channel.send(
-      input.chatId,
-      { card: renderCard(input.state, input.cardRenderOptions) },
-      input.sendOpts,
-    );
-    requireMessageReceipt(result, 'card');
-    await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
-    log.info('outbound', 'sent', outboundLogFields(input, 'card', body, result));
-  } else if (input.replyMode === 'markdown') {
-    if (body.trim()) {
+    if (input.replyMode === 'card') {
+      const result = await input.channel.send(
+        input.chatId,
+        { card: renderCard(input.state, input.cardRenderOptions) },
+        input.sendOpts,
+      );
+      requireMessageReceipt(result, 'card');
+      await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
+      log.info('outbound', 'sent', outboundLogFields(input, 'card', body, result));
+    } else if (input.replyMode === 'markdown') {
+      if (body.trim()) {
+        const result = await input.channel.send(
+          input.chatId,
+          { markdown: body },
+          input.sendOpts,
+        );
+        requireMessageReceipt(result, 'markdown');
+        await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
+        log.info('outbound', 'sent', outboundLogFields(input, 'markdown', body, result));
+      }
+    } else if (body.trim()) {
       const result = await input.channel.send(
         input.chatId,
         { markdown: body },
         input.sendOpts,
       );
-      requireMessageReceipt(result, 'markdown');
+      requireMessageReceipt(result, 'text');
       await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
-      log.info('outbound', 'sent', outboundLogFields(input, 'markdown', body, result));
+      log.info('outbound', 'sent', outboundLogFields(input, 'text', body, result));
     }
-  } else if (body.trim()) {
-    const result = await input.channel.send(
-      input.chatId,
-      { markdown: body },
-      input.sendOpts,
-    );
-    requireMessageReceipt(result, 'text');
-    await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
-    log.info('outbound', 'sent', outboundLogFields(input, 'text', body, result));
-  }
   } catch (error) {
     await input.deliveryRun?.recordDelivery?.({ unknown: true });
     throw error;
