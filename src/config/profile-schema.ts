@@ -4,6 +4,7 @@ import type {
   MessageReplyMode,
   SecretsConfig,
 } from './schema';
+import { normalizeOrcaConfig, type OrcaConfig } from '../agent/orca/config';
 import {
   normalizePermissions,
   permissionsToLegacySandbox,
@@ -39,6 +40,8 @@ export interface SandboxConfig {
 }
 
 export interface CodexConfig {
+  /** Opt in to an already-running Orca supervisor instead of spawning Codex. */
+  orca?: OrcaConfig;
   binaryPath: string;
   realpath?: string;
   version?: string;
@@ -378,6 +381,7 @@ function normalizeWorkspaces(input: {
 function normalizeCodex(input: CodexConfig & { flags?: unknown }): CodexConfig {
   const codex: CodexConfig = {
     binaryPath: input.binaryPath,
+    ...(input.orca ? { orca: normalizeOrcaConfig(input.orca) } : {}),
     ...(typeof input.realpath === 'string' ? { realpath: input.realpath } : {}),
     ...(typeof input.version === 'string' ? { version: input.version } : {}),
     ...(typeof input.sha256 === 'string' ? { sha256: input.sha256 } : {}),

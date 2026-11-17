@@ -1,5 +1,8 @@
 import { ClaudeAdapter } from '../agent/claude/adapter';
 import { CodexAdapter } from '../agent/codex/adapter';
+import { OrcaAdapter } from '../agent/orca/adapter';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { AgentPreflightError, type AgentAvailability } from '../agent/preflight';
 import type { AgentAdapter } from '../agent/types';
 import type { AppPaths } from '../config/app-paths';
@@ -35,6 +38,13 @@ export function createRuntimeAgent(
       : undefined;
   if (profileConfig.agentKind === 'codex') {
     const codex = profileConfig.codex;
+    if (codex?.orca) {
+      return new OrcaAdapter({
+        ...codex.orca,
+        stateDir: join(appPaths.profileDir, 'orca'),
+        reportCommand: [process.execPath, join(dirname(fileURLToPath(import.meta.url)), 'orca-report.js')],
+      });
+    }
     if (!codex?.binaryPath) {
       throw new Error('codex profile requires codex.binaryPath');
     }

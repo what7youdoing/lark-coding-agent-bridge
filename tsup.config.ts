@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig([
   {
-    entry: { cli: 'src/cli/index.ts' },
+    entry: { cli: 'src/cli/index.ts', 'orca-report': 'src/agent/orca/report-cli.ts' },
     outDir: 'dist',
     format: ['esm'],
     target: 'node20',

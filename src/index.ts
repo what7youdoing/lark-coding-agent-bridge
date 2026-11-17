@@ -19,3 +19,6 @@ export type {
   TelemetryEvent,
 } from './core/telemetry';
 export { reportMetric, reportError } from './core/logger';
+
+export { OrcaAdapter } from './agent/orca/adapter';
+export type { OrcaConfig, OrcaBinding } from './agent/orca/config';

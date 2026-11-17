@@ -30,6 +30,9 @@ export const CLAUDE_DEFAULT_PERMISSION_MODE: ClaudePermissionMode = 'bypassPermi
 
 export interface AgentRunOptions {
   runId: string;
+  /** Conversation scope for backends bound to existing persistent agents. */
+  scopeId?: string;
+  sourceMessageIds?: readonly string[];
   prompt: string;
   cwd?: string;
   sessionId?: string;
@@ -52,6 +55,8 @@ export interface AgentRun {
   readonly runId: string;
   readonly events: AsyncIterable<AgentEvent>;
   stop(): Promise<void>;
+  /** Persistent backends may hold their lease until final IM delivery is confirmed. */
+  recordDelivery?(receipt: { messageId: string } | { unknown: true } | { sending: true }): Promise<void>;
   /**
    * Wait up to `timeoutMs` for the agent process to exit on its own.
    * Resolves true if it exited within the window, false if the timer

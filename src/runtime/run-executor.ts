@@ -17,6 +17,7 @@ export interface RunExecutorDeps {
 
 export interface SubmitRunInput {
   scopeId: string;
+  sourceMessageIds?: readonly string[];
   policy: RunPolicyAllow;
   sessionId?: string;
   threadId?: string;
@@ -95,6 +96,8 @@ export class RunExecutor {
     const queueWaitMs = startedAt - submittedAt;
     const runOptions = {
       runId,
+      scopeId: input.scopeId,
+      sourceMessageIds: input.sourceMessageIds,
       prompt: input.policy.prompt,
       cwd: input.policy.cwdRealpath,
       sessionId: input.sessionId,
