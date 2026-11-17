@@ -82,6 +82,39 @@ afterEach(async () => {
 });
 
 describe('markdown stream startup failures', () => {
+  it('records persistent-backend delivery only after the IM receipt and preserves source IDs', async () => {
+    const h = await createHarness({ messageReply: 'text', events: [
+      { type: 'final_text', content: 'final result' }, { type: 'done', terminationReason: 'normal' },
+    ] });
+    const delivery = vi.fn(async (_receipt: unknown) => {});
+    const original = h.agent.run.bind(h.agent);
+    vi.spyOn(h.agent, 'run').mockImplementation(opts => {
+      const run = original(opts);
+      run.recordDelivery = delivery;
+      return run;
+    });
+    await startTestBridge(h);
+    await h.channel.handlers.message?.(message('om_persistent', 'run'));
+    await waitFor(() => delivery.mock.calls.length === 2);
+    expect(delivery.mock.calls.map(c => c[0])).toEqual([{ sending: true }, { messageId: 'sent_1' }]);
+    expect(h.agent.runOptions[0]).toMatchObject({ scopeId: 'oc_dm', sourceMessageIds: ['om_persistent'] });
+  });
+
+  it('records ambiguous IM delivery once without retrying', async () => {
+    const h = await createHarness({ messageReply: 'text', send: async () => { throw new Error('timeout'); },
+      events: [{ type: 'final_text', content: 'final result' }, { type: 'done', terminationReason: 'normal' }] });
+    const delivery = vi.fn(async (_receipt: unknown) => {});
+    const original = h.agent.run.bind(h.agent);
+    vi.spyOn(h.agent, 'run').mockImplementation(opts => {
+      const run = original(opts); run.recordDelivery = delivery; return run;
+    });
+    await startTestBridge(h);
+    await h.channel.handlers.message?.(message('om_unknown_delivery', 'run'));
+    await waitFor(() => delivery.mock.calls.length === 2);
+    expect(delivery.mock.calls.map(c => c[0])).toEqual([{ sending: true }, { unknown: true }]);
+    expect(h.channel.sent).toHaveLength(1);
+  });
+
   it('does not leave the IM queue blocked when the agent exits before stream producer starts', async () => {
     const h = await createHarness();
     await startTestBridge(h);

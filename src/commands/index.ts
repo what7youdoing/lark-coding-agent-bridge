@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { orcaCommandRejection } from '../agent/orca/commands';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute } from 'node:path';
@@ -221,6 +222,8 @@ export async function tryHandleCommand(ctx: CommandContext): Promise<boolean> {
   const args = parts.slice(1).join(' ');
   const h = handlers[cmd];
   if (!h) return false;
+  const orcaRejection = orcaCommandRejection(cmd, !!ctx.controls.profileConfig.codex?.orca);
+  if (orcaRejection) { await reply(ctx, orcaRejection); return true; }
   if (
     isAdminCommand(cmd) &&
     !canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok
@@ -249,6 +252,8 @@ export async function runCommandHandler(
 ): Promise<boolean> {
   const h = handlers[`/${name}`];
   if (!h) return false;
+  const orcaRejection = orcaCommandRejection(name, !!ctx.controls.profileConfig.codex?.orca);
+  if (orcaRejection) { await reply(ctx, orcaRejection); return true; }
   if (
     isAdminCommand(name) &&
     !canRunAdminCommand(ctx.controls.profileConfig, ctx.controls, ctx.msg.senderId).ok
@@ -810,6 +815,14 @@ async function larkCliStatus(ctx: CommandContext): Promise<'app' | 'user-ready' 
 }
 
 async function handleStatus(_args: string, ctx: CommandContext): Promise<void> {
+  const orca = ctx.controls.profileConfig.codex?.orca;
+  if (orca) {
+    const binding = orca.bindings[ctx.scope];
+    await reply(ctx, binding
+      ? `Orca 主管：\`${binding.terminal}\`\n工作区：\`${binding.cwd}\`\n当前桥接任务：${ctx.activeRuns.get(ctx.scope) ? '执行中' : '无活动任务（持久锁状态需另行核对）'}\n模型、推理强度、Fast 和权限以 Orca 当前会话为准。`
+      : '当前群或话题尚未绑定 Orca 主管；未创建 Agent。');
+    return;
+  }
   const cwd = effectiveWorkspaceCwd(ctx);
   const sess = ctx.sessions.getRaw(ctx.scope);
   const isCodex = ctx.controls.profileConfig.agentKind === 'codex';

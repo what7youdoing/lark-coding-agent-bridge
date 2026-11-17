@@ -14,7 +14,9 @@ import {
   type BridgePromptQuotedMessage,
   type BridgePromptTopicMessage,
 } from '../agent/prompt';
-import type { AgentAdapter, AgentEvent } from '../agent/types';
+import type { AgentAdapter, AgentEvent, AgentRun } from '../agent/types';
+import { captureOrcaMessage, recordOrcaMessageState } from '../agent/orca/ledger';
+import { resolveAppPaths } from '../config/app-paths';
 import { handleCardAction } from '../card/dispatcher';
 import { CallbackAuth } from '../card/callback-auth';
 import { CallbackNonceStore } from '../card/callback-store';
@@ -755,6 +757,11 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
     return;
   }
 
+  const orcaStateDir = controls.profileConfig.codex?.orca
+    ? join(resolveAppPaths({ rootDir: dirname(controls.configPath), profile: controls.profile }).profileDir, 'orca')
+    : undefined;
+  if (orcaStateDir && !await captureOrcaMessage(orcaStateDir, emsg)) return;
+
   const handled = await tryHandleCommand({
     channel,
     msg: emsg,
@@ -779,7 +786,18 @@ async function intakeMessage(deps: IntakeDeps): Promise<void> {
   });
   if (handled) {
     const dropped = pending.cancel(scope);
+    if (orcaStateDir) {
+      await recordOrcaMessageState(orcaStateDir, [emsg.messageId], { status: 'command-handled' });
+      await recordOrcaMessageState(orcaStateDir, dropped.map(m => m.messageId), { status: 'cancelled' });
+    }
     log.info('intake', 'command', { scope, droppedPending: dropped.length });
+    return;
+  }
+
+  if (orcaStateDir && !controls.profileConfig.codex?.orca?.bindings[scope]) {
+    await recordOrcaMessageState(orcaStateDir, [emsg.messageId], { status: 'unbound' });
+    await channel.send(emsg.chatId, { markdown: '当前群或话题尚未绑定独立 Orca 主管，未执行任务，也未创建 Agent。请先配置精确绑定。' },
+      { replyTo: emsg.messageId, ...(chatMode === 'topic' ? { replyInThread: true } : {}) });
     return;
   }
 
@@ -961,6 +979,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
       : claudeCapability(controls.profileConfig);
   const flow = await startRunFlow({
     scopeId: scope,
+    sourceMessageIds: batch.map(m => m.messageId),
     scope: scopeContext,
     prompt,
     attachments: attachments.map(toPolicyAttachment),
@@ -1111,6 +1130,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
           });
         }
         await sendFinalReply({
+          deliveryRun: execution.run,
           channel,
           chatId,
           scope,
@@ -1185,6 +1205,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
       await recallIfEmptyStreamedReply(channel, progress, filterForPrefs(latestState), scope);
       if (controls.profileConfig.agentKind === 'codex') {
         await sendFinalReply({
+          deliveryRun: execution.run,
           channel,
           chatId,
           scope,
@@ -1248,6 +1269,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
       await recallIfEmptyStreamedReply(channel, progress, filterForPrefs(latestState), scope);
       if (controls.profileConfig.agentKind === 'codex') {
         await sendFinalReply({
+          deliveryRun: execution.run,
           channel,
           chatId,
           scope,
@@ -1270,6 +1292,7 @@ async function runAgentBatch(deps: RunBatchDeps): Promise<void> {
         async () => {},
       );
       await sendFinalReply({
+        deliveryRun: execution.run,
         channel,
         chatId,
         scope,
@@ -1442,6 +1465,7 @@ async function recallStreamedMessage(
 }
 
 async function sendFinalReply(input: {
+  deliveryRun?: AgentRun;
   channel: LarkChannel;
   chatId: string;
   scope: string;
@@ -1460,6 +1484,8 @@ async function sendFinalReply(input: {
     return;
   }
 
+  await input.deliveryRun?.recordDelivery?.({ sending: true });
+  try {
   if (input.replyMode === 'card') {
     const result = await input.channel.send(
       input.chatId,
@@ -1467,6 +1493,7 @@ async function sendFinalReply(input: {
       input.sendOpts,
     );
     requireMessageReceipt(result, 'card');
+    await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
     log.info('outbound', 'sent', outboundLogFields(input, 'card', body, result));
   } else if (input.replyMode === 'markdown') {
     if (body.trim()) {
@@ -1476,6 +1503,7 @@ async function sendFinalReply(input: {
         input.sendOpts,
       );
       requireMessageReceipt(result, 'markdown');
+      await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
       log.info('outbound', 'sent', outboundLogFields(input, 'markdown', body, result));
     }
   } else if (body.trim()) {
@@ -1485,7 +1513,12 @@ async function sendFinalReply(input: {
       input.sendOpts,
     );
     requireMessageReceipt(result, 'text');
+    await input.deliveryRun?.recordDelivery?.({ messageId: result.messageId });
     log.info('outbound', 'sent', outboundLogFields(input, 'text', body, result));
+  }
+  } catch (error) {
+    await input.deliveryRun?.recordDelivery?.({ unknown: true });
+    throw error;
   }
 }
 
